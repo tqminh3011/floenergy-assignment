@@ -26,15 +26,14 @@ public class Nem12CsvProcessor {
     public static final int MINUTES_IN_DAY = 24 * 60; // 1440
     public static final String OUTPUT_FOLDER = "output/";
 
-    private static final int CHUNK_SIZE = 1000000;
+    private static final int FILE_LINES_LIMIT = 1000000;
     private static final Logger logger = LoggerFactory.getLogger(Nem12CsvProcessor.class);
 
     public static void processFile(String filePath) throws IOException {
         Instant start = Instant.now();
 
         try {
-            List<MeterReading> meterReadings = readAndGenerateReadings(filePath);
-            writeToFileInChunks(meterReadings);
+            readAndGenerateReadings(filePath);
         } catch (Exception e) {
             logger.error(e.toString());
             logger.error(Arrays.toString(e.getStackTrace()));
@@ -44,34 +43,19 @@ public class Nem12CsvProcessor {
         }
     }
 
-    public static void writeToFileInChunks(List<MeterReading> readings) throws IOException {
-        logger.info("Started writing to file in chunks");
-        String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd'-'HHmmss"));
-
-        for (int i = 0; i < readings.size(); i += CHUNK_SIZE) {
-            List<MeterReading> chunk = readings.subList(i, Math.min(i + CHUNK_SIZE, readings.size()));
-            int index = i / CHUNK_SIZE;
-
-            // Process the chunk
-            logger.info("Processing chunk index: {}", index);
-
-            String fileName = OUTPUT_FOLDER + "insert_statements_" + currentTime + "-" + index + ".sql";
-            writeToFile(fileName, chunk);
-        }
-    }
-
-    private static void writeToFile(String fileName, List<MeterReading> readings) throws IOException {
+    private static void writeToFile(int fileIndex, String currentTime, List<MeterReading> readings) throws IOException {
         StringBuilder sb = new StringBuilder();
+        String fileName = OUTPUT_FOLDER + "insert_statements_" + currentTime + "-" + fileIndex + ".sql";
 
-        readings.forEach(reading -> {
-            sb.append(
-                    String.format("INSERT INTO meter_readings (nmi, timestamp, consumption) VALUES ('%s', '%s', %s);\n",
-                            reading.nmi(),
-                            reading.timestamp(),
-                            reading.consumption()
-                    )
-            );
-        });
+        logger.info("Writing to {}", fileName);
+
+        readings.forEach(reading -> sb.append(
+                String.format("INSERT INTO meter_readings (nmi, timestamp, consumption) VALUES ('%s', '%s', %s);\n",
+                        reading.nmi(),
+                        reading.timestamp(),
+                        reading.consumption()
+                )
+        ));
 
         Files.createDirectories(Path.of(OUTPUT_FOLDER));
 
@@ -86,11 +70,13 @@ public class Nem12CsvProcessor {
     }
 
     // TODO should validate NEM12 format of CSV file
-    public static List<MeterReading> readAndGenerateReadings(String filePath) throws IOException, CsvValidationException {
+    public static void readAndGenerateReadings(String filePath) throws IOException, CsvValidationException {
         Path path = Path.of(filePath);
         logger.info("Start reading file {}", path.getFileName());
 
         List<MeterReading> readings = new ArrayList<>();
+        String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd'-'HHmmss"));
+        int fileIndex = 0;
 
         try (Reader reader = Files.newBufferedReader(path)) {
             try (CSVReader csvReader = new CSVReader(reader)) {
@@ -104,19 +90,25 @@ public class Nem12CsvProcessor {
                     String recordIndicator = row[0];
                     switch (recordIndicator) {
                         case "200" -> {
+                            // check and write previous readings into file if limit exceeds
+                            if (readings.size() > FILE_LINES_LIMIT) {
+                                writeToFile(fileIndex, currentTime, readings);
+                                readings.clear();
+                                fileIndex++;
+                            }
+
                             currentNmi = row[1];
                             intervalLengthInMins = Integer.parseInt(row[8]);
                         }
 
-                        case "300" -> {
-                            readings.addAll(generate300readings(currentNmi, row, intervalLengthInMins));
-                        }
+                        case "300" -> readings.addAll(generate300readings(currentNmi, row, intervalLengthInMins));
                     }
                 }
+
+                // write last readings
+                writeToFile(fileIndex, currentTime, readings);
             }
         }
-
-        return readings;
     }
 
     private static List<MeterReading> generate300readings(String currentNmi, String[] row, int intervalLengthInMins) {
