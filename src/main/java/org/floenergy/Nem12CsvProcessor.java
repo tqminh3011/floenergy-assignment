@@ -14,38 +14,39 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class Nem12CsvProcessor {
 
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     public static final int MINUTES_IN_DAY = 24 * 60; // 1440
-    public static final String OUTPUT_FOLDER = "output/";
 
     private static final int FILE_LINES_LIMIT = 1000000;
     private static final Logger logger = LoggerFactory.getLogger(Nem12CsvProcessor.class);
 
-    public static void processFile(String filePath) throws IOException {
+    public static void processFile(String filePath,
+                                   String outputFolder,
+                                   String currentTime) {
         Instant start = Instant.now();
 
         try {
-            readAndGenerateReadings(filePath);
+            readAndGenerateReadings(filePath, outputFolder, currentTime);
         } catch (Exception e) {
-            logger.error(e.toString());
-            logger.error(Arrays.toString(e.getStackTrace()));
+            logger.error("Failed to process file", e);
         } finally {
             Instant end = Instant.now();
-            logger.info("Processing done in {} seconds", Duration.between(start, end).toSeconds());
+            logger.info("Processing executed in {} seconds", Duration.between(start, end).toSeconds());
         }
     }
 
-    private static void writeToFile(int fileIndex, String currentTime, List<MeterReading> readings) throws IOException {
+    private static void writeToFile(int fileIndex,
+                                    String currentTime,
+                                    List<MeterReading> readings,
+                                    String outputFolder) throws IOException {
         StringBuilder sb = new StringBuilder();
-        String fileName = OUTPUT_FOLDER + "insert_statements_" + currentTime + "-" + fileIndex + ".sql";
+        String fileName = outputFolder + "insert_statements_" + currentTime + "-" + fileIndex + ".sql";
 
         logger.info("Writing to {}", fileName);
 
@@ -57,7 +58,7 @@ public class Nem12CsvProcessor {
                 )
         ));
 
-        Files.createDirectories(Path.of(OUTPUT_FOLDER));
+        Files.createDirectories(Path.of(outputFolder));
 
         Files.writeString(
                 Path.of(fileName),
@@ -69,13 +70,14 @@ public class Nem12CsvProcessor {
         logger.info("Generated INSERT statements in file {}", fileName);
     }
 
-    // TODO should validate NEM12 format of CSV file
-    public static void readAndGenerateReadings(String filePath) throws IOException, CsvValidationException {
+    // TODO should validate NEM12 format of CSV file?
+    public static void readAndGenerateReadings(String filePath,
+                                               String outputFolder,
+                                               String currentTime) throws IOException, CsvValidationException {
         Path path = Path.of(filePath);
         logger.info("Start reading file {}", path.getFileName());
 
         List<MeterReading> readings = new ArrayList<>();
-        String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd'-'HHmmss"));
         int fileIndex = 0;
 
         try (Reader reader = Files.newBufferedReader(path)) {
@@ -92,7 +94,7 @@ public class Nem12CsvProcessor {
                         case "200" -> {
                             // check and write previous readings into file if limit exceeds
                             if (readings.size() > FILE_LINES_LIMIT) {
-                                writeToFile(fileIndex, currentTime, readings);
+                                writeToFile(fileIndex, currentTime, readings, outputFolder);
                                 readings.clear();
                                 fileIndex++;
                             }
@@ -106,7 +108,7 @@ public class Nem12CsvProcessor {
                 }
 
                 // write last readings
-                writeToFile(fileIndex, currentTime, readings);
+                writeToFile(fileIndex, currentTime, readings, outputFolder);
             }
         }
     }
