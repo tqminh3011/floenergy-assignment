@@ -1,13 +1,15 @@
 plugins {
     id("java")
     id("application")
+    id("org.springframework.boot") version "3.4.5"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "org.floenergy"
 version = "1.0-SNAPSHOT"
 
 application {
-    mainClass.set("org.floenergy.Main")
+    mainClass.set("org.floenergy.MeterReadingApp")
 }
 
 tasks.named<JavaExec>("run") {
@@ -19,6 +21,9 @@ repositories {
 }
 
 dependencies {
+    // spring
+    implementation("org.springframework.boot:spring-boot-starter")
+
     // https://mvnrepository.com/artifact/com.opencsv/opencsv
     implementation("com.opencsv:opencsv:5.10")
 
@@ -27,6 +32,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.13")
     implementation("org.slf4j:slf4j-api:2.0.17")
 
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }

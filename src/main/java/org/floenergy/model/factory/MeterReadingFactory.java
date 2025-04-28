@@ -1,4 +1,4 @@
-package org.floenergy;
+package org.floenergy.model.factory;
 
 import org.floenergy.model.entity.MeterReading;
 
