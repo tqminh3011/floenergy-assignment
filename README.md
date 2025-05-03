@@ -8,6 +8,10 @@
 - Test: JUnit 5
 
 ### How to build and test?
+#### 0. Prerequisites
+Make sure you have JDK17 installed on machine, and switch to Java17 if got multiple Java versions.
+* JDK17 download link: https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html
+
 #### 1. Build: 
 ```
 ./gradlew clean build
